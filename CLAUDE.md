@@ -28,6 +28,8 @@ El Fargate Profile que determina si un pod puede siquiera arrancar se define en 
 
 Mismo Checkov que el resto del ecosistema, pero apuntado a manifiestos K8s planos (`framework: kubernetes` en vez de `terraform`) — Checkov soporta ambos frameworks nativamente. `kubeconform` complementa validando contra el schema real de la API de Kubernetes (typos de campos, valores inválidos) antes de que eso llegue a Argo.
 
+**Gotcha real, no obvio**: el comentario `#checkov:skip=CKV_XXX:motivo` que funciona en todos los `.tf` de este workspace **no hace nada en manifiestos de Kubernetes** — falla en silencio, sin error, el check simplemente sigue apareciendo como FAILED. La sintaxis correcta para K8s es una **annotation** en `metadata`: `checkov.io/skipN: "CKV_XXX=motivo"` (confirmado contra la doc oficial de Checkov después de que el primer intento con comentarios no tuviera efecto). Si un check está asociado al Pod derivado de un `Deployment` (no al Deployment en sí, ej. `CKV2_K8S_6`), puede hacer falta repetir la annotation en `spec.template.metadata.annotations`, no solo en el `metadata` de nivel Deployment.
+
 ## Sobre el Argo CD gestionado por AWS (EKS Capability for Argo CD)
 
 Evaluado y descartado por ahora — ver el detalle completo en la conversación que originó este repo. Resumen: fully-managed, corre fuera del cluster en la cuenta de AWS, cero mantenimiento, pero cobra por hora de Capability + por hora de cada `Application` gestionada, y solo despliega a clusters EKS (no portable a AKS si algún día se necesita). Para 1 cluster con pocas apps demo, el self-hosted (lo que se decidió acá) no tiene ese costo y sigue siendo agnóstico de cloud. Reconsiderar si esto escala a múltiples clusters/cuentas.
