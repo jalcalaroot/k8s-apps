@@ -1,0 +1,64 @@
+name: Validate manifests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write # subir el SARIF de Checkov a la pestaña Security
+
+jobs:
+  validate:
+    name: kustomize build + kubeconform + Checkov
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # kubectl trae kustomize integrado (kubectl kustomize) - sin
+      # dependencias extra para el build en si.
+      - name: Descargar kubeconform
+        run: |
+          curl -sSL -o kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz
+          tar -xzf kubeconform.tar.gz kubeconform
+          chmod +x kubeconform
+
+      # Cada overlay se compila y valida por separado - un error en una app
+      # no debe tapar el de otra, y el output deja claro cual overlay fallo.
+      # -ignore-missing-schemas: necesario para CRDs (ej. la Application/
+      # ApplicationSet de Argo en bootstrap/) que no tienen schema publico
+      # conocido - se saltean en vez de fallar.
+      - name: kustomize build + kubeconform (cada overlay)
+        run: |
+          set -e
+          for overlay in apps/*/overlays/*/; do
+            if [ -f "$overlay/kustomization.yaml" ]; then
+              echo "== $overlay =="
+              kubectl kustomize "$overlay" | ./kubeconform -strict -ignore-missing-schemas -summary
+            fi
+          done
+
+      - name: kubeconform (bootstrap/, manifiestos planos)
+        run: ./kubeconform -strict -ignore-missing-schemas -summary bootstrap/*.yaml
+
+      - name: Checkov
+        id: checkov
+        uses: bridgecrewio/checkov-action@f967808197a8d784d3e72919f38c3ff0cda7884e # v12.3122.0
+        with:
+          directory: .
+          framework: kubernetes
+          quiet: true
+          soft_fail: false
+          output_format: cli,sarif
+          output_file_path: console,results.sarif
+
+      - name: Subir resultados de Checkov a la pestaña Security
+        if: always() && steps.checkov.outcome != 'skipped'
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: results.sarif

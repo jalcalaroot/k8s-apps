@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Sin Ingress por defecto - ver README/CLAUDE.md sobre por que (ALB no
+# reescribe path prefixes sin la feature nueva de URL rewrite, que todavia
+# no verificamos con sintaxis real). Probar con:
+#   kubectl port-forward svc/podinfo 9898:80
+replicas:
+  - name: podinfo
+    count: 2
+
+namespace: default

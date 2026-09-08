@@ -1,0 +1,43 @@
+# NO instala Argo CD - asume que Argo CD ya esta instalado en el cluster
+# (eso vive en aws-eks-cluster, ver su README/CLAUDE.md). Este manifiesto es
+# lo unico que hay que aplicar una vez, a mano, para que Argo empiece a
+# vigilar este repo:
+#
+#   kubectl apply -f bootstrap/applicationset.yaml
+#
+# A partir de ahi, agregar una app nueva es tan simple como crear
+# apps/<nombre>/overlays/dev/ con su propio kustomization.yaml - el
+# generator de git detecta el directorio nuevo solo y crea la Application
+# correspondiente, sin tocar este archivo.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: aws-eks-apps-dev
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/jalcalaroot/aws-eks-apps.git
+        revision: main
+        directories:
+          - path: apps/*/overlays/dev
+  template:
+    metadata:
+      # path.basenameNormalized = "dev" para todas, asi que se usa
+      # path[1] (el nombre de la app) como nombre de la Application.
+      name: "{{path[1]}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/jalcalaroot/aws-eks-apps.git
+        targetRevision: main
+        path: "{{path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: default
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=false
