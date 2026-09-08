@@ -3,6 +3,9 @@
 # GitOps. La usamos acá por el mismo motivo: es la app "de verdad" mas
 # estandar para probar que el pipeline GitOps funciona, sin tener que
 # mantener nosotros una imagen custom solo para el demo.
+# checkov:skip=CKV_K8S_43: pin a digest requiere el sha256 real de la imagen (`docker inspect`/`crane digest` al momento de actualizar) - hardcodear un digest sin verificarlo es peor que no tenerlo, se deja el tag semver por ahora.
+# checkov:skip=CKV_K8S_21: namespace "default" a proposito para el ejemplo base - un namespace propio necesita un Fargate Profile nuevo en aws-eks-cluster/eks.tf primero (ver CLAUDE.md), no se agrega sin ese paso de infra.
+# checkov:skip=CKV2_K8S_6: NetworkPolicy en Fargate no esta verificado (soporte real de node-level enforcement sin nodos EC2 no confirmado) - no se agrega una policy que podria no aplicarse de verdad, en vez de asumir que funciona.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,9 +28,20 @@ spec:
       # muda a otro namespace, hay que agregar un Fargate Profile nuevo en
       # aws-eks-cluster/eks.tf primero - sin eso el pod queda Pending para
       # siempre (ver README/CLAUDE.md).
+      # securityContext a nivel POD (Checkov CKV_K8S_29 pide esto ademas del
+      # de nivel container) - UID/GID alto no-root explicito (evita colisión
+      # con UIDs del host, CKV_K8S_40) y seccomp RuntimeDefault (CKV_K8S_31).
+      # 65534 = "nobody", funciona con la imagen de podinfo sin cambios.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: podinfo
           image: ghcr.io/stefanprodan/podinfo:6.15.0
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 9898

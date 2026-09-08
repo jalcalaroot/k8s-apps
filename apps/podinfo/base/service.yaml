@@ -1,3 +1,4 @@
+# checkov:skip=CKV_K8S_21: mismo motivo que deployment.yaml - namespace "default" a proposito hasta tener un Fargate Profile dedicado en aws-eks-cluster.
 apiVersion: v1
 kind: Service
 metadata:
