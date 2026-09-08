@@ -3,15 +3,20 @@
 # GitOps. La usamos acá por el mismo motivo: es la app "de verdad" mas
 # estandar para probar que el pipeline GitOps funciona, sin tener que
 # mantener nosotros una imagen custom solo para el demo.
-# checkov:skip=CKV_K8S_43: pin a digest requiere el sha256 real de la imagen (`docker inspect`/`crane digest` al momento de actualizar) - hardcodear un digest sin verificarlo es peor que no tenerlo, se deja el tag semver por ahora.
-# checkov:skip=CKV_K8S_21: namespace "default" a proposito para el ejemplo base - un namespace propio necesita un Fargate Profile nuevo en aws-eks-cluster/eks.tf primero (ver CLAUDE.md), no se agrega sin ese paso de infra.
-# checkov:skip=CKV2_K8S_6: NetworkPolicy en Fargate no esta verificado (soporte real de node-level enforcement sin nodos EC2 no confirmado) - no se agrega una policy que podria no aplicarse de verdad, en vez de asumir que funciona.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: podinfo
   labels:
     app: podinfo
+  # A diferencia de Terraform, Checkov para Kubernetes NO usa comentarios
+  # "#checkov:skip=" - necesita annotations checkov.io/skipN en el metadata
+  # del recurso (confirmado contra la doc oficial de Checkov, no adivinado
+  # despues de que la sintaxis de Terraform no funcionara acá).
+  annotations:
+    checkov.io/skip1: "CKV_K8S_43=pin a digest requiere el sha256 real de la imagen (docker inspect/crane digest al momento de actualizar) - hardcodear un digest sin verificarlo es peor que no tenerlo, se deja el tag semver por ahora"
+    checkov.io/skip2: "CKV_K8S_21=namespace default a proposito para el ejemplo base - un namespace propio necesita un Fargate Profile nuevo en aws-eks-cluster/eks.tf primero (ver CLAUDE.md), no se agrega sin ese paso de infra"
+    checkov.io/skip3: "CKV2_K8S_6=NetworkPolicy en Fargate no esta verificado (soporte real de node-level enforcement sin nodos EC2 no confirmado) - no se agrega una policy que podria no aplicarse de verdad, en vez de asumir que funciona"
 spec:
   replicas: 2
   selector:
@@ -21,6 +26,11 @@ spec:
     metadata:
       labels:
         app: podinfo
+      # CKV2_K8S_6 evalua el Pod derivado del template, no el Deployment -
+      # se repite el skip acá por si Checkov lo asocia al metadata del pod
+      # en vez de al del Deployment.
+      annotations:
+        checkov.io/skip1: "CKV2_K8S_6=NetworkPolicy en Fargate no esta verificado (soporte real de node-level enforcement sin nodos EC2 no confirmado) - no se agrega una policy que podria no aplicarse de verdad, en vez de asumir que funciona"
     spec:
       # Sin nodeSelector/tolerations ni namespace especial - igual que
       # hello-world en aws-eks-cluster, el targeting a Fargate lo decide el
@@ -38,6 +48,9 @@ spec:
         runAsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
+      # podinfo no llama a la API de Kubernetes - sin necesidad del token de
+      # su ServiceAccount montado (CKV_K8S_38).
+      automountServiceAccountToken: false
       containers:
         - name: podinfo
           image: ghcr.io/stefanprodan/podinfo:6.15.0
