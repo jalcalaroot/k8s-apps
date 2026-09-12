@@ -1,6 +1,6 @@
-# aws-eks-apps
+# k8s-apps
 
-Repo de manifiestos de aplicaciones (GitOps), separado a propósito de la infraestructura (`aws-eks-cluster`). Argo CD vigila este repo y sincroniza el cluster — no hay `kubectl apply` manual ni pipeline de CD acá.
+Repo de manifiestos de aplicaciones (GitOps), compartido entre `aws-eks-cluster` (EKS) y `azure-aks-cluster` (AKS) — separado a propósito de la infraestructura. Cada cluster corre su propio Argo CD, que vigila este repo y sincroniza ese cluster — no hay `kubectl apply` manual ni pipeline de CD acá.
 
 ## Decisión clave: Argo CD se instala en `aws-eks-cluster`, no acá
 

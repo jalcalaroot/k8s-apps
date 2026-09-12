@@ -12,12 +12,12 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: aws-eks-apps-dev
+  name: k8s-apps-dev
   namespace: argocd
 spec:
   generators:
     - git:
-        repoURL: https://github.com/jalcalaroot/aws-eks-apps.git
+        repoURL: https://github.com/jalcalaroot/k8s-apps.git
         revision: main
         directories:
           - path: apps/*/overlays/dev
@@ -29,7 +29,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/jalcalaroot/aws-eks-apps.git
+        repoURL: https://github.com/jalcalaroot/k8s-apps.git
         targetRevision: main
         path: "{{path}}"
       destination:
