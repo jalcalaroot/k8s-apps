@@ -22,7 +22,7 @@ Se confirmó vía la doc oficial de AWS (release notes de EKS Auto Mode, jul 202
 
 ## Prerrequisito real para namespaces nuevos
 
-El Fargate Profile que determina si un pod puede siquiera arrancar se define en Terraform, en `aws-eks-cluster/eks.tf` — no acá. Hoy solo existen profiles para `default` y `kube-system`. Si una app nueva necesita su propio namespace (aislamiento, borrar todo con `kubectl delete namespace`), hay que agregar un Fargate Profile ahí ANTES de desplegar acá — si no, el pod queda `Pending` para siempre, sin error obvio de por qué.
+El Fargate Profile que determina si un pod puede siquiera arrancar se define en Terraform, en `aws-eks-cluster/eks.tf` — no acá. Hoy existen profiles para `default`, `kube-system`, `argocd` y `keda`. Si una app nueva necesita su propio namespace (aislamiento, borrar todo con `kubectl delete namespace`), hay que agregar un Fargate Profile ahí ANTES de desplegar acá — si no, el pod queda `Pending` para siempre, sin error obvio de por qué.
 
 ## CI: Checkov con framework `kubernetes`, no `terraform`
 
