@@ -11,4 +11,4 @@ If you find a security issue — an exposed secret, a leaked credential in git h
 - The Kubernetes manifests in this repository (`apps/`, `bootstrap/`)
 - Accidentally committed secrets, kubeconfig files, or credentials
 
-Out of scope: vulnerabilities in the demo application images themselves (e.g. `podinfo`), Argo CD, Kustomize, or the underlying EKS cluster — please report those to their respective maintainers, or see [`aws-eks-cluster`](https://github.com/jalcalaroot/aws-eks-cluster) for the cluster infrastructure.
+Out of scope: vulnerabilities in the demo application images themselves (e.g. `podinfo`), Argo CD, Kustomize, or the underlying EKS/AKS cluster — please report those to their respective maintainers, or see [`aws-eks-cluster`](https://github.com/jalcalaroot/aws-eks-cluster) / [`azure-aks-cluster`](https://github.com/jalcalaroot/azure-aks-cluster) for the cluster infrastructure.

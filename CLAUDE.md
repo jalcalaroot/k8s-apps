@@ -2,9 +2,9 @@
 
 Repo de manifiestos de aplicaciones (GitOps), compartido entre `aws-eks-cluster` (EKS) y `azure-aks-cluster` (AKS) — separado a propósito de la infraestructura. Cada cluster corre su propio Argo CD, que vigila este repo y sincroniza ese cluster — no hay `kubectl apply` manual ni pipeline de CD acá.
 
-## Decisión clave: Argo CD se instala en `aws-eks-cluster`, no acá
+## Decisión clave: Argo CD se instala en cada cluster, no acá
 
-Este repo **no instala Argo CD**. Lo único que vive acá es el `ApplicationSet` (`bootstrap/applicationset.yaml`) — la config declarativa de *qué* sincronizar. El controller en sí (Helm install, upgrades, RBAC) es infraestructura del cluster, mismo criterio que el ALB Controller o CoreDNS — todo eso va en `aws-eks-cluster`. Separación deliberada: instalar Argo es una decisión de infra (una vez), agregar una app nueva es una decisión de este repo (constante) — mezclarlas en un solo repo hace que cada cambio de app dispare revisión de infra sin necesidad.
+Este repo **no instala Argo CD**. Lo único que vive acá es el `ApplicationSet` (`bootstrap/applicationset.yaml`) — la config declarativa de *qué* sincronizar. El controller en sí (Helm install, upgrades, RBAC) es infraestructura del cluster, mismo criterio que el ALB Controller o CoreDNS — todo eso va en `aws-eks-cluster` o `azure-aks-cluster`, según el cluster. Separación deliberada: instalar Argo es una decisión de infra (una vez, por cluster), agregar una app nueva es una decisión de este repo (constante) — mezclarlas en un solo repo hace que cada cambio de app dispare revisión de infra sin necesidad.
 
 ## Por qué Kustomize, no Helm
 
@@ -40,4 +40,4 @@ Bump del tag de imagen de `podinfo` (o de cualquier app futura) — Dependabot n
 
 ## Consumidores
 
-Ninguno — proyecto hoja. Argo CD (instalado en `aws-eks-cluster`) es quien lee este repo, no al revés.
+Ninguno — proyecto hoja. Argo CD (instalado en cada cluster — `aws-eks-cluster` o `azure-aks-cluster`) es quien lee este repo, no al revés.
