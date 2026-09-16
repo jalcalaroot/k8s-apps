@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Probar con: kubectl port-forward svc/game-2048 8080:80
+replicas:
+  - name: "game-2048"
+    count: 2
+
+namespace: default
+
+patches:
+  - path: patch-virtual-node.yaml

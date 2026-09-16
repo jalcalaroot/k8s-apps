@@ -1,0 +1,49 @@
+# Aplicar SOLO en el Argo CD del cluster EKS:
+#
+#   kubectl apply -f bootstrap/applicationset-eks.yaml
+#
+# NO instala Argo CD - asume que ya esta instalado (ver aws-eks-cluster).
+# A partir de aca, agregar una app nueva a EKS es tan simple como crear
+# apps/<nombre>/overlays/eks/ con su propio kustomization.yaml - el
+# generator de git detecta el directorio nuevo solo, sin tocar este
+# archivo.
+#
+# Por que "overlays/eks" y no un unico "overlays/dev" compartido con AKS
+# (el diseño original): EKS Fargate y AKS Virtual Nodes difieren en como
+# reclaman pods por default - Fargate lo hace solo, via Fargate Profile
+# (Terraform, fuera de este repo); AKS cae al node pool real por default
+# y necesita un patch explicito (nodeSelector/tolerations) para ir a
+# Virtual Nodes. Un solo overlay compartido no puede expresar las dos
+# cosas a la vez - de ahi el split real, no cosmetico. Ver CLAUDE.md.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: k8s-apps-eks
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/jalcalaroot/k8s-apps.git
+        revision: main
+        directories:
+          - path: apps/*/overlays/eks
+  template:
+    metadata:
+      # path.basenameNormalized = "eks" para todas, asi que se usa
+      # path[1] (el nombre de la app) como nombre de la Application.
+      name: "{{path[1]}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/jalcalaroot/k8s-apps.git
+        targetRevision: main
+        path: "{{path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: default
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=false

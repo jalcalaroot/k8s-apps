@@ -1,0 +1,20 @@
+# Autoescalado con KEDA, igual que podinfo/2048 - a diferencia de esos
+# dos, una UI de dashboard personal no tiene una necesidad real de
+# escalar (bajo trafico, un solo usuario), asi que esto es mas para
+# completar el patron "Helm + KEDA" que para resolver un problema real de
+# capacidad. minReplicaCount: 1, no 2 - no hay motivo para pagar una
+# segunda replica idle de algo que nadie mas consume.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: headlamp
+spec:
+  scaleTargetRef:
+    name: headlamp
+  minReplicaCount: 1
+  maxReplicaCount: 3
+  triggers:
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "50"
