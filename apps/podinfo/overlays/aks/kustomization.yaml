@@ -3,7 +3,10 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - ingress.yaml
 
+# Publica en https://podinfo.azure.jalcalaroot.com via el Application
+# Gateway compartido (AGIC).
 replicas:
   - name: podinfo
     count: 2

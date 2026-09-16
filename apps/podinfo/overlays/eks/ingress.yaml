@@ -1,0 +1,32 @@
+# Mismo ALB compartido que hello-world/argo-cd (aws-eks-cluster/k8s/ingress.yaml)
+# via group.name eks-demo-apps - sin esto, cada Ingress nuevo crearia su
+# propio Application Load Balancer (costo extra por hora + LCU). El
+# certificado ACM es real, provisionado en aws-eks-cluster (ver acm.tf,
+# aws_acm_certificate.demo_apps["podinfo"]) - el ARN es publico, no un
+# secreto, se commitea tal cual (mismo criterio que un service account
+# email o un ID de recurso).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: podinfo
+  annotations:
+    checkov.io/skip1: "CKV_K8S_21=namespace default a proposito, mismo criterio que el resto de este repo - ver CLAUDE.md"
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:740104998573:certificate/a2fddefb-6d1e-472e-91bd-f322c12dbf90
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTP":80}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/group.name: eks-demo-apps
+spec:
+  ingressClassName: alb
+  rules:
+    - host: podinfo.aws.jalcalaroot.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: podinfo
+                port:
+                  number: 80

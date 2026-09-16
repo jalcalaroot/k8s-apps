@@ -3,11 +3,12 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - ingress.yaml
 
-# Sin Ingress por defecto - ver README/CLAUDE.md sobre por que (ALB no
-# reescribe path prefixes sin la feature nueva de URL rewrite, que todavia
-# no verificamos con sintaxis real). Probar con:
-#   kubectl port-forward svc/podinfo 9898:80
+# Publica en https://podinfo.aws.jalcalaroot.com via el ALB compartido con
+# hello-world/argo-cd - host-based routing, no path-based (ver README/
+# CLAUDE.md sobre por que: ALB no reescribe path prefixes sin la feature
+# nueva de URL rewrite, que no verificamos con sintaxis real).
 replicas:
   - name: podinfo
     count: 2
