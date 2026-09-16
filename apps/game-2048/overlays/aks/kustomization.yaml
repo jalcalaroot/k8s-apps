@@ -3,8 +3,10 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - ingress.yaml
 
-# Probar con: kubectl port-forward svc/game-2048 8080:80
+# Publica en https://game-2048.azure.jalcalaroot.com via el Application
+# Gateway compartido (AGIC).
 replicas:
   - name: "game-2048"
     count: 2

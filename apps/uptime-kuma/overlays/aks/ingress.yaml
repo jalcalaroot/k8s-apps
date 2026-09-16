@@ -1,0 +1,26 @@
+# Ver apps/podinfo/overlays/aks/ingress.yaml para el motivo del patron.
+# Backend port 3001, no 80 - unica diferencia real con las otras 2 apps.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: uptime-kuma
+  annotations:
+    checkov.io/skip1: "CKV_K8S_21=namespace default a proposito, mismo criterio que el resto de este repo - ver CLAUDE.md"
+    appgw.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: azure-application-gateway
+  tls:
+    - hosts:
+        - uptime-kuma.azure.jalcalaroot.com
+      secretName: uptime-kuma-tls
+  rules:
+    - host: uptime-kuma.azure.jalcalaroot.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: uptime-kuma
+                port:
+                  number: 3001

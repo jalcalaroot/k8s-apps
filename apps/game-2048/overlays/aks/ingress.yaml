@@ -1,0 +1,25 @@
+# Ver apps/podinfo/overlays/aks/ingress.yaml para el motivo del patron.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: game-2048
+  annotations:
+    checkov.io/skip1: "CKV_K8S_21=namespace default a proposito, mismo criterio que el resto de este repo - ver CLAUDE.md"
+    appgw.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: azure-application-gateway
+  tls:
+    - hosts:
+        - game-2048.azure.jalcalaroot.com
+      secretName: game-2048-tls
+  rules:
+    - host: game-2048.azure.jalcalaroot.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: game-2048
+                port:
+                  number: 80
