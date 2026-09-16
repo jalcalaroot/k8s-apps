@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+replicas:
+  - name: podinfo
+    count: 2
+
+namespace: default
+
+patches:
+  - path: patch-virtual-node.yaml

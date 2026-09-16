@@ -1,0 +1,18 @@
+# Autoescalado real via KEDA (no decorativo): trigger de CPU, mismo
+# mecanismo que HPA (metrics-server), no un mock. minReplicaCount >= 1 a
+# proposito - los triggers cpu/memory de KEDA no soportan escalar a 0
+# (solo los triggers de fuentes externas como colas/eventos pueden).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: podinfo
+spec:
+  scaleTargetRef:
+    name: podinfo
+  minReplicaCount: 2
+  maxReplicaCount: 5
+  triggers:
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "50"

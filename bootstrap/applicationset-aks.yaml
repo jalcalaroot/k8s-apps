@@ -1,18 +1,14 @@
-# NO instala Argo CD - asume que Argo CD ya esta instalado en el cluster
-# (eso vive en aws-eks-cluster, ver su README/CLAUDE.md). Este manifiesto es
-# lo unico que hay que aplicar una vez, a mano, para que Argo empiece a
-# vigilar este repo:
+# Aplicar SOLO en el Argo CD del cluster AKS:
 #
-#   kubectl apply -f bootstrap/applicationset.yaml
+#   kubectl apply -f bootstrap/applicationset-aks.yaml
 #
-# A partir de ahi, agregar una app nueva es tan simple como crear
-# apps/<nombre>/overlays/dev/ con su propio kustomization.yaml - el
-# generator de git detecta el directorio nuevo solo y crea la Application
-# correspondiente, sin tocar este archivo.
+# NO instala Argo CD - asume que ya esta instalado (ver azure-aks-cluster).
+# Ver bootstrap/applicationset-eks.yaml para el motivo real del split
+# eks/aks (no es un simple rename de "dev").
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: k8s-apps-dev
+  name: k8s-apps-aks
   namespace: argocd
 spec:
   generators:
@@ -20,10 +16,10 @@ spec:
         repoURL: https://github.com/jalcalaroot/k8s-apps.git
         revision: main
         directories:
-          - path: apps/*/overlays/dev
+          - path: apps/*/overlays/aks
   template:
     metadata:
-      # path.basenameNormalized = "dev" para todas, asi que se usa
+      # path.basenameNormalized = "aks" para todas, asi que se usa
       # path[1] (el nombre de la app) como nombre de la Application.
       name: "{{path[1]}}"
     spec:

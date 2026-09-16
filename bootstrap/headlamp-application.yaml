@@ -1,0 +1,70 @@
+# Headlamp - UI web para el cluster (github.com/kubernetes-sigs/headlamp,
+# proyecto SIG-UI). Reemplaza a Kubernetes Dashboard, que era el plan
+# original (ver README "Roadmap") - Dashboard esta archivado desde hace
+# poco ("This project is now archived and no longer maintained", su
+# propio README recomienda migrar a Headlamp) - encontrado al ir a
+# instalarlo, no asumido del plan viejo.
+#
+# NO forma parte del ApplicationSet (bootstrap/applicationset.yaml) a
+# proposito: ese generator busca apps/*/overlays/dev (Kustomize). Headlamp
+# usa el chart Helm oficial via `source.helm` (Argo nativo, sin Kustomize)
+# - justamente el tercer patron que el roadmap queria demostrar. Se aplica
+# a mano una sola vez, igual que el ApplicationSet mismo.
+#
+#   kubectl apply -f bootstrap/headlamp-application.yaml
+#
+# Multi-source: el chart Helm (UI + su propio Deployment/Service/SA) mas
+# un segundo source de este mismo repo (apps/headlamp/extra/) con la
+# ServiceAccount de solo lectura para el login humano y el ScaledObject de
+# KEDA - Argo CD aplica ambos como parte de la misma Application.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: headlamp
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/headlamp/
+      chart: headlamp
+      targetRevision: 0.45.0
+      helm:
+        # clusterRoleBinding.create=true + clusterRoleName=cluster-admin
+        # son el default del chart - se desactiva a proposito: la
+        # ServiceAccount del POD de Headlamp no necesita ningun permiso de
+        # cluster (config.unsafeUseServiceAccountToken=false, tambien
+        # default, hace que cada usuario se autentique con su PROPIO
+        # token pegado en el login, no con la identidad del pod). Dejar
+        # cluster-admin ahi sin uso es superficie de ataque innecesaria si
+        # alguna vez hay un RCE en Headlamp mismo.
+        #
+        # resources.* - el chart no define ninguno por defecto (resources: {}
+        # explicito en su values.yaml, "conscious choice for the user").
+        # El ScaledObject de apps/headlamp/extra/scaledobject.yaml usa un
+        # trigger cpu - el webhook de admision de KEDA rechaza cualquier
+        # ScaledObject cuyo Deployment objetivo no tenga un cpu request
+        # ("the scaledobject has a cpu trigger but the container headlamp
+        # doesn't have the cpu request defined", error real al aplicar).
+        parameters:
+          - name: clusterRoleBinding.create
+            value: "false"
+          - name: resources.requests.cpu
+            value: "50m"
+          - name: resources.requests.memory
+            value: "128Mi"
+          - name: resources.limits.cpu
+            value: "200m"
+          - name: resources.limits.memory
+            value: "256Mi"
+    - repoURL: https://github.com/jalcalaroot/k8s-apps.git
+      targetRevision: main
+      path: apps/headlamp/extra
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
