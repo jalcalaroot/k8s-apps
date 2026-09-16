@@ -1,0 +1,16 @@
+# Ver apps/podinfo/overlays/aks/patch-virtual-node.yaml para el motivo.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uptime-kuma
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/role: agent
+        type: virtual-kubelet
+      tolerations:
+        - key: virtual-kubelet.io/provider
+          operator: Exists
+        - key: azure.com/aci
+          effect: NoSchedule

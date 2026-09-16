@@ -1,0 +1,22 @@
+# AKS necesita esto explicito para ir a Virtual Nodes (ACI) - a diferencia
+# de EKS Fargate, que "reclama" pods por namespace via Fargate Profile sin
+# nada en el manifiesto (ver overlays/eks). Sin esto, el pod cae en el
+# node pool real por default - encontrado a mano cuando el node pool real
+# se quedo sin CPU disponible (ya usado por Argo CD, que si necesita el
+# node real - ver azure-aks-cluster/CLAUDE.md) al desplegar estas 3 apps
+# ahi sin querer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: podinfo
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/role: agent
+        type: virtual-kubelet
+      tolerations:
+        - key: virtual-kubelet.io/provider
+          operator: Exists
+        - key: azure.com/aci
+          effect: NoSchedule

@@ -1,0 +1,19 @@
+# Ver apps/podinfo/overlays/aks/patch-virtual-node.yaml para el motivo -
+# mismo patron, aplicado tambien al initContainer (que corre en el mismo
+# pod, hereda el nodeSelector/tolerations del pod entero, no hace falta
+# repetirlo por container).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-2048
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/role: agent
+        type: virtual-kubelet
+      tolerations:
+        - key: virtual-kubelet.io/provider
+          operator: Exists
+        - key: azure.com/aci
+          effect: NoSchedule

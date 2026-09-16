@@ -32,25 +32,53 @@ jobs:
       # no debe tapar el de otra, y el output deja claro cual overlay fallo.
       # -ignore-missing-schemas: necesario para CRDs (ej. la Application/
       # ApplicationSet de Argo en bootstrap/) que no tienen schema publico
-      # conocido - se saltean en vez de fallar.
+      # conocido - se saltean en vez de fallar. El mismo render (kustomize
+      # build) tambien se guarda en rendered/ para que Checkov escanee eso
+      # despues, no los fragmentos crudos - ver el paso de Checkov abajo.
       - name: kustomize build + kubeconform (cada overlay)
         run: |
           set -e
+          mkdir -p rendered
           for overlay in apps/*/overlays/*/; do
             if [ -f "$overlay/kustomization.yaml" ]; then
               echo "== $overlay =="
-              kubectl kustomize "$overlay" | ./kubeconform -strict -ignore-missing-schemas -summary
+              name=$(echo "$overlay" | tr '/' '-')
+              kubectl kustomize "$overlay" | tee "rendered/${name}.yaml" | ./kubeconform -strict -ignore-missing-schemas -summary
             fi
           done
 
       - name: kubeconform (bootstrap/, manifiestos planos)
-        run: ./kubeconform -strict -ignore-missing-schemas -summary bootstrap/*.yaml
+        run: ./kubeconform -strict -ignore-missing-schemas -summary bootstrap/*.yaml apps/headlamp/extra/*.yaml
+
+      # Checkov escanea SOLO el output ya renderizado por kustomize
+      # (rendered/) mas los manifiestos planos (bootstrap/, apps/*/extra/)
+      # - nunca la fuente cruda de apps/*/base|overlays. Un patch de
+      # Kustomize (ej. apps/*/overlays/*/patch-*.yaml) es un fragmento
+      # PARCIAL a proposito (solo el campo que cambia, ej. nodeSelector) -
+      # escanearlo crudo como si fuera un Deployment completo genera
+      # falsos positivos masivos (le faltan securityContext, resources,
+      # etc. que SI estan en el recurso real una vez que Kustomize aplica
+      # el patch). Encontrado a mano: agregar mas #checkov:skip no
+      # arreglaba nada porque el hallazgo apuntaba al archivo de patch,
+      # no al recurso real ya fusionado.
+      #
+      # bootstrap/ y apps/headlamp/extra/ se copian TAMBIEN a rendered/
+      # antes de correr Checkov - el input `directory` de este Action
+      # pasa el string tal cual a `checkov -d`, sin splitear por coma
+      # (confirmado corriendo esto en CI: "Directory rendered,bootstrap,...
+      # does not exist" - Checkov silenciosamente escaneaba 0 archivos y
+      # el job pasaba en falso, sin haber corrido ni un check). Un solo
+      # directorio real, no una lista.
+      - name: Copiar manifiestos planos a rendered/
+        run: |
+          cp bootstrap/*.yaml rendered/
+          cp apps/headlamp/extra/*.yaml rendered/
 
       - name: Checkov
         id: checkov
         uses: bridgecrewio/checkov-action@f967808197a8d784d3e72919f38c3ff0cda7884e # v12.3122.0
         with:
-          directory: .
+          directory: rendered
           framework: kubernetes
           quiet: true
           soft_fail: false

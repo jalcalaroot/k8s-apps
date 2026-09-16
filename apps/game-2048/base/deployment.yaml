@@ -1,0 +1,149 @@
+# 2048 (github.com/aws-samples/eks-workshop-samples, imagen
+# public.ecr.aws/l6m2t8p7/docker-2048) - la app de referencia del propio
+# EKS Workshop de AWS para probar Ingress/ALB. Se usa acá por el mismo
+# motivo que podinfo: es "de verdad" (jugable), no un placeholder, y no
+# hace falta mantener un Dockerfile propio.
+#
+# La imagen es un nginx de Alpine de hace ~4 años, sin URL/health endpoint
+# propios. Corre como root (no adivinado - probado a mano con `docker run`
+# antes de escribir esto): nginx necesita bindear el puerto 80 (root o
+# CAP_NET_BIND_SERVICE) y escribir en rutas fijas bajo /var/lib/nginx y
+# /run/nginx. Se logró un readOnlyRootFilesystem real de todas formas.
+#
+# Gotcha real de EKS Fargate, NO reproducible con `docker run` local: con
+# capabilities.drop=ALL, root pierde CAP_DAC_OVERRIDE y queda sujeto a los
+# permisos reales del filesystem - /var/lib/nginx en la imagen no es
+# transitable sin esa capability, aunque el proceso sea root (confirmado
+# con un pod de debug: "Permission denied" en /var/lib/nginx incluso con
+# un emptyDir montado en su subdirectorio /logs, porque sin permiso de
+# traversal en el padre no importa el permiso del hijo). `docker run`
+# local sin --cap-drop=ALL nunca lo mostró. Fix: montar el emptyDir
+# directo en /var/lib/nginx (no en sus subdirectorios) + un initContainer
+# que crea logs/ y tmp/ ahí con permisos abiertos antes de que arranque
+# el container principal - probado a mano contra el cluster real.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "game-2048"
+  labels:
+    app: "game-2048"
+  annotations:
+    checkov.io/skip1: "CKV_K8S_43=imagen sin publicar digests estables en su registry (public.ecr.aws) - se deja el tag, mismo criterio que podinfo"
+    checkov.io/skip2: "CKV_K8S_21=namespace default a proposito, mismo criterio que podinfo - ver CLAUDE.md"
+    checkov.io/skip3: "CKV2_K8S_6=NetworkPolicy no verificado en Fargate/ACI, mismo motivo que podinfo"
+    checkov.io/skip4: "CKV_K8S_23=corre como root a proposito - nginx necesita bindear el puerto 80 y esta imagen (4 anios, sin usuario no-root definido) no soporta CAP_NET_BIND_SERVICE sin reconstruirla. Probado a mano: falla con permission denied como no-root incluso dando writable solo a los directorios que nginx necesita."
+    checkov.io/skip5: "CKV_K8S_40=mismo motivo que CKV_K8S_23 arriba - corre como root (UID 0), no un UID alto, porque necesita bindear el puerto 80"
+    checkov.io/skip6: "CKV_K8S_14=el repo de ECR Public de esta imagen (public.ecr.aws/l6m2t8p7/docker-2048) solo publica el tag latest - confirmado contra la API real (docker registry v2 tags/list), no hay un tag versionado alternativo. imagePullPolicy: Always mitiga el riesgo de cache stale."
+    checkov.io/skip7: "CKV_K8S_25=capabilities agregadas a proposito, es el set default de Docker (no ALL/root) restaurado porque el arranque interno de nginx (chown+setuid al bajar del master root a su worker sin privilegios) lo necesita en EKS Fargate - probado a mano: ni root con solo CAP_CHOWN alcanzaba, dropear todas las capabilities rompe el arranque por completo. Es el mismo set que un docker run sin --cap-drop trae implicito, no una lista inventada."
+    checkov.io/skip8: "CKV_K8S_10=el initContainer init-nginx-dirs no declara resources a proposito - ACI (AKS Virtual Nodes) rechaza el pod entero si un initContainer las declara (error real: azure container instances initContainers do not support resources requests). No es un descuido, ver comentario junto al initContainer en este mismo archivo."
+    checkov.io/skip9: "CKV_K8S_11=mismo motivo que CKV_K8S_10 arriba - initContainer sin resources por incompatibilidad real con ACI, confirmada desplegando en AKS."
+    checkov.io/skip10: "CKV_K8S_12=mismo motivo que CKV_K8S_10 arriba - initContainer sin resources por incompatibilidad real con ACI, confirmada desplegando en AKS."
+    checkov.io/skip11: "CKV_K8S_13=mismo motivo que CKV_K8S_10 arriba - initContainer sin resources por incompatibilidad real con ACI, confirmada desplegando en AKS."
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: "game-2048"
+  template:
+    metadata:
+      labels:
+        app: "game-2048"
+      annotations:
+        checkov.io/skip1: "CKV2_K8S_6=NetworkPolicy no verificado en Fargate/ACI, mismo motivo que podinfo"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: init-nginx-dirs
+          image: public.ecr.aws/l6m2t8p7/docker-2048:latest
+          command: ["sh", "-c", "mkdir -p /var/lib/nginx/logs /var/lib/nginx/tmp && chmod -R 0777 /var/lib/nginx"]
+          volumeMounts:
+            - name: nginx-var
+              mountPath: /var/lib/nginx
+          # Sin resources a proposito - ACI (Virtual Nodes/AKS) rechaza
+          # cualquier initContainer que las declare ("azure container
+          # instances initContainers do not support resources requests",
+          # error real encontrado al desplegar en AKS). No hace falta en
+          # Fargate tampoco - initContainers de vida corta, sin necesidad
+          # real de un limite propio.
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: "game-2048"
+          image: public.ecr.aws/l6m2t8p7/docker-2048:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          # memory 100Mi, no 64Mi - encontrado a mano en AKS: ACI convierte
+          # Mi a GB con solo 1 decimal de precision, y 64Mi = 0.0625 GB
+          # trunca a 0.0 GB. ACI rechaza el pod entero con "ResourceNegativeOrZero"
+          # porque memoryInGB tiene que ser positivo. 100Mi = 0.1048 GB
+          # sobrevive el truncamiento (queda en 0.1). Mismo tipo de bug que
+          # el truncamiento de memoria ya documentado para el initContainer
+          # de Argo CD en aws-eks-cluster/azure-aks-cluster.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 100Mi
+            limits:
+              cpu: 50m
+              memory: 100Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            # nginx arranca como root pero baja privilegios de verdad para
+            # sus workers (usuario "nginx" del propio nginx.conf de esta
+            # imagen). Solo CAP_CHOWN no alcanzaba - seguia fallando el
+            # mismo chown() aun con esa capability sola (confirmado con un
+            # pod de debug: `chown` manual funcionaba bien con drop=ALL+
+            # add=CHOWN, pero el chown INTERNO de nginx seguia fallando -
+            # asi que no era la capability sola, sino la combinacion que
+            # nginx necesita durante su propio arranque). Se restauro el
+            # set de capabilities default de Docker (documentado, no
+            # adivinado - es lo que un `docker run` sin --cap-drop trae
+            # implicito, y por eso la prueba local original funcionaba sin
+            # que pareciera un problema de capabilities en absoluto) en vez
+            # de seguir adivinando una por una.
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "SETGID", "SETUID", "SETPCAP", "SETFCAP", "KILL", "NET_BIND_SERVICE", "NET_RAW", "SYS_CHROOT", "AUDIT_WRITE"]
+          # Rutas exactas que nginx necesita escribir - confirmadas una por
+          # una contra el error real (mkdir/open failed) antes de asumir
+          # que alcanzaban, no una lista generica de "donde nginx suele
+          # escribir". nginx-var se monta ENTERO en /var/lib/nginx (no
+          # solo en logs/tmp) porque root sin CAP_DAC_OVERRIDE no podia
+          # ni transitar el /var/lib/nginx original de la imagen en
+          # Fargate - ver comentario arriba del initContainer. nginx-log
+          # se descubrio en una segunda vuelta: una vez resuelto el chown,
+          # nginx llego mas lejos en su arranque y recien ahi mostro que
+          # tambien necesita escribir en /var/log/nginx (la ruta estandar,
+          # distinta de /var/lib/nginx que usa esta imagen de Alpine) -
+          # nunca aparecio antes porque nginx fallaba mas temprano.
+          volumeMounts:
+            - name: nginx-var
+              mountPath: /var/lib/nginx
+            - name: nginx-run
+              mountPath: /run/nginx
+            - name: nginx-log
+              mountPath: /var/log/nginx
+      volumes:
+        - name: nginx-var
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-log
+          emptyDir: {}

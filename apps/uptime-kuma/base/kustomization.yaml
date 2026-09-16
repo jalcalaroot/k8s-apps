@@ -4,8 +4,7 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - service.yaml
-  - scaledobject.yaml
 
 commonLabels:
-  app.kubernetes.io/name: podinfo
+  app.kubernetes.io/name: uptime-kuma
   app.kubernetes.io/part-of: k8s-apps
