@@ -48,7 +48,7 @@ jobs:
           done
 
       - name: kubeconform (bootstrap/, manifiestos planos)
-        run: ./kubeconform -strict -ignore-missing-schemas -summary bootstrap/*.yaml
+        run: ./kubeconform -strict -ignore-missing-schemas -summary bootstrap/*.yaml apps/headlamp/extra/*.yaml
 
       # Checkov escanea SOLO el output ya renderizado por kustomize
       # (rendered/) mas los manifiestos planos (bootstrap/, apps/*/extra/)
@@ -61,11 +61,24 @@ jobs:
       # el patch). Encontrado a mano: agregar mas #checkov:skip no
       # arreglaba nada porque el hallazgo apuntaba al archivo de patch,
       # no al recurso real ya fusionado.
+      #
+      # bootstrap/ y apps/headlamp/extra/ se copian TAMBIEN a rendered/
+      # antes de correr Checkov - el input `directory` de este Action
+      # pasa el string tal cual a `checkov -d`, sin splitear por coma
+      # (confirmado corriendo esto en CI: "Directory rendered,bootstrap,...
+      # does not exist" - Checkov silenciosamente escaneaba 0 archivos y
+      # el job pasaba en falso, sin haber corrido ni un check). Un solo
+      # directorio real, no una lista.
+      - name: Copiar manifiestos planos a rendered/
+        run: |
+          cp bootstrap/*.yaml rendered/
+          cp apps/headlamp/extra/*.yaml rendered/
+
       - name: Checkov
         id: checkov
         uses: bridgecrewio/checkov-action@f967808197a8d784d3e72919f38c3ff0cda7884e # v12.3122.0
         with:
-          directory: rendered,bootstrap,apps/headlamp/extra
+          directory: rendered
           framework: kubernetes
           quiet: true
           soft_fail: false
