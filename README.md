@@ -89,10 +89,19 @@ kubectl kustomize apps/podinfo/overlays/eks | kubectl apply -f -
 
 ## Exposing an app publicly
 
-Not wired up by default — apps only get a `ClusterIP` Service (test with `kubectl port-forward`). Two real options when an app needs a public URL:
+All 3 demo apps (not Headlamp — see below) now have a public URL, via each overlay's `ingress.yaml`:
 
-1. **Its own `Ingress` + own ALB** — simplest, but a new Application Load Balancer per app is a real recurring cost (hourly + LCU).
-2. **Share the existing ALB** via `alb.ingress.kubernetes.io/group.name` (same group as `aws-eks-cluster`'s `hello-world` and Argo CD Ingresses) — no extra ALB cost. Path-based routing to a path other than `/` needs the ALB Controller's URL rewrite feature (added in v2.13/v2.14, our controller is v3.5.0) to strip the prefix before it reaches the app — the exact annotation syntax for that still isn't verified, so **use host-based routing instead** (each app gets its own subdomain, not a path) until that's confirmed.
+| App | EKS | AKS |
+|---|---|---|
+| podinfo | https://podinfo.aws.jalcalaroot.com | https://podinfo.azure.jalcalaroot.com |
+| game-2048 | https://game-2048.aws.jalcalaroot.com | https://game-2048.azure.jalcalaroot.com |
+| uptime-kuma | https://uptime-kuma.aws.jalcalaroot.com | https://uptime-kuma.azure.jalcalaroot.com |
+
+Both clouds share the existing ALB/Application Gateway (`aws-eks-cluster`'s `hello-world`/Argo CD ALB, `azure-aks-cluster`'s AGIC Application Gateway) via **host-based routing** — each app gets its own subdomain, one shared load balancer, no per-app cost. Path-based routing (e.g. `/podinfo` on a single host) was considered and rejected: the ALB Controller's URL rewrite feature (added in v2.13/v2.14, ours is v3.5.0) that would strip the path prefix before it reaches the app was never verified with real annotation syntax, so host-based routing was used instead — no rewrite needed.
+
+**The certificate/TLS setup is cloud infrastructure, not app config, so it lives in the cluster repos, not here**: `aws-eks-cluster` provisions one ACM certificate per app (DNS-validated, fully automatic) and the ARN gets pasted into `alb.ingress.kubernetes.io/certificate-arn` on each `overlays/eks/ingress.yaml`; `azure-aks-cluster` provisions one Let's Encrypt certificate per app (ACME DNS-01) and the resulting PEM/key get manually turned into a `kubectl create secret tls <app>-tls` that each `overlays/aks/ingress.yaml` references by name. **This means the ARN/Secret name is a real, non-automated dependency between repos** — if a certificate ever gets recreated in the infra repo, the corresponding `Ingress` here needs a matching update. See the "Consumers" note in both `aws-eks-cluster/CLAUDE.md` and `azure-aks-cluster/CLAUDE.md`.
+
+Headlamp stays `ClusterIP`-only on purpose — it's a cluster admin UI, not a demo meant for public/anonymous access (test with `kubectl port-forward`).
 
 ## CI
 
