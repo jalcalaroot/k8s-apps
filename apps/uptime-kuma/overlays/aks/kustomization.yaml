@@ -3,8 +3,10 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - ingress.yaml
 
-# Probar con: kubectl port-forward svc/uptime-kuma 3001:3001
+# Publica en https://uptime-kuma.azure.jalcalaroot.com via el Application
+# Gateway compartido (AGIC).
 namespace: default
 
 patches:

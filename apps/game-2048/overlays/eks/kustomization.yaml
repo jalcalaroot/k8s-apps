@@ -3,9 +3,9 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - ingress.yaml
 
-# Sin Ingress por ahora - mismo motivo que podinfo (ver README/CLAUDE.md).
-# Probar con: kubectl port-forward svc/game-2048 8080:80
+# Publica en https://game-2048.aws.jalcalaroot.com via el ALB compartido.
 replicas:
   - name: "game-2048"
     count: 2

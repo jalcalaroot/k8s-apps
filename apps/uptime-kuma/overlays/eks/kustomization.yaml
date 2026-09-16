@@ -3,7 +3,7 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - ingress.yaml
 
-# Sin Ingress por ahora - mismo motivo que podinfo (ver README/CLAUDE.md).
-# Probar con: kubectl port-forward svc/uptime-kuma 3001:3001
+# Publica en https://uptime-kuma.aws.jalcalaroot.com via el ALB compartido.
 namespace: default
