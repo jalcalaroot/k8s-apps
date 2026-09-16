@@ -1,0 +1,97 @@
+# Uptime Kuma (github.com/louislam/uptime-kuma) - dashboard de monitoreo
+# que puede vigilar de verdad a hello-world/Argo CD/2048 una vez arriba,
+# no es puramente decorativo (mismo criterio que documenta CLAUDE.md).
+#
+# SIN KEDA/autoescalado horizontal a proposito - no es un descuido. Esta
+# imagen guarda sus datos (monitores, historial, usuarios) en un SQLite
+# local (/app/data), sin soporte de clustering/DB externa documentado en
+# el proyecto. Escalar a N réplicas significaría N bases de datos
+# independientes: cada réplica vería un set distinto de monitores segun
+# a cual la haya tocado el balanceador - no es "autoescalado", es romper
+# la app. replicas: 1 fijo. Ver README para el detalle de las 3 apps.
+#
+# Corre como root a proposito (probado a mano, no adivinado): el
+# entrypoint de la imagen hace chown sobre /app/data al iniciar, falla
+# con "Operation not permitted" como no-root. El resto del filesystem
+# SI queda read-only real - solo /app/data necesita ser writable.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uptime-kuma
+  labels:
+    app: uptime-kuma
+  annotations:
+    checkov.io/skip1: "CKV_K8S_43=imagen sin publicar digests estables en DockerHub para este tag - se deja el tag, mismo criterio que podinfo"
+    checkov.io/skip2: "CKV_K8S_21=namespace default a proposito, mismo criterio que podinfo - ver CLAUDE.md"
+    checkov.io/skip3: "CKV2_K8S_6=NetworkPolicy no verificado en Fargate/ACI, mismo motivo que podinfo"
+    checkov.io/skip4: "CKV_K8S_23=corre como root a proposito - el entrypoint de la imagen hace chown sobre /app/data al iniciar, probado a mano que falla con 'Operation not permitted' como no-root"
+    checkov.io/skip5: "CKV_K8S_40=mismo motivo que CKV_K8S_23 arriba - corre como root (UID 0), no un UID alto"
+    checkov.io/skip6: "CKV_K8S_25=capabilities agregadas a proposito (CHOWN, SETUID, SETGID) - el entrypoint necesita chown sobre /app/data y despues setpriv para bajar a un usuario sin privilegios antes de arrancar node, probado a mano contra el error real de cada una"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: uptime-kuma
+  template:
+    metadata:
+      labels:
+        app: uptime-kuma
+      annotations:
+        checkov.io/skip1: "CKV2_K8S_6=NetworkPolicy no verificado en Fargate/ACI, mismo motivo que podinfo"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: uptime-kuma
+          image: louislam/uptime-kuma:1
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3001
+          # / redirige a /setup o /dashboard segun el estado - 200-399
+          # cuenta como probe exitoso, no hace falta un endpoint dedicado.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            # El entrypoint arranca como root y usa setpriv para bajar a
+            # un usuario sin privilegios antes de arrancar node - eso
+            # necesita CAP_SETUID/CAP_SETGID (confirmado con el error
+            # real: "setpriv: setgroups failed: Operation not permitted"
+            # con drop: ["ALL"] puro), y el chown previo sobre /app/data
+            # necesita CAP_CHOWN (mismo patron que 2048/nginx).
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "SETUID", "SETGID"]
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        # emptyDir, no PVC a proposito - PVC en Fargate/ACI es un gotcha ya
+        # evitado en otras apps de este cluster (ver CLAUDE.md de
+        # azure-aks-cluster sobre Kubernetes Dashboard). Consecuencia real:
+        # los monitores configurados se pierden si el pod se reprograma -
+        # aceptable para un demo, documentado a proposito en vez de
+        # descubierto en produccion.
+        - name: data
+          emptyDir: {}

@@ -1,0 +1,35 @@
+# Encontrado a mano en AKS: el pod entraba en un loop de restarts (exit
+# code 0 "Completed" cada ~10-40s, IP nunca asignada, phase Pending para
+# siempre) con los initialDelaySeconds por defecto del base (10s/30s).
+# ACI tarda mas en levantar un container que un kubelet real (deploy de
+# grupo completo, no solo el proceso) - la imagen de uptime-kuma (Node.js,
+# mucho mas pesada que podinfo/2048) no llegaba a escuchar en el puerto
+# 3001 antes de que el liveness probe la matara 3 veces y el propio
+# virtual-kubelet recreara el container group entero, reiniciando el
+# reloj de cold-start cada vez. No ocurre en EKS Fargate con los mismos
+# valores (confirmado corriendo ahi sin este patch).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uptime-kuma
+spec:
+  template:
+    spec:
+      containers:
+        - name: uptime-kuma
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
