@@ -10,10 +10,25 @@
 # a cual la haya tocado el balanceador - no es "autoescalado", es romper
 # la app. replicas: 1 fijo. Ver README para el detalle de las 3 apps.
 #
-# Corre como root a proposito (probado a mano, no adivinado): el
-# entrypoint de la imagen hace chown sobre /app/data al iniciar, falla
-# con "Operation not permitted" como no-root. El resto del filesystem
-# SI queda read-only real - solo /app/data necesita ser writable.
+# Corre SIN root. La version anterior corria como root porque el
+# entrypoint de la imagen (extra/entrypoint.sh, leido de la imagen real)
+# hace `chown -hRc $PUID:$PGID /app/data` y despues
+# `exec setpriv --reuid $PUID --regid $PGID ...` - con PUID/PGID default 0,
+# o sea que node terminaba corriendo como root de todas formas, y el
+# chown/setpriv obligaba a agregar CHOWN/SETUID/SETGID. Ahora se saltea ese
+# entrypoint (command/args abajo arrancan node directo bajo dumb-init, igual
+# que el CMD de la imagen) y el pod corre como UID 65534 sin ninguna
+# capability. No hace falta el chown: /app/data es un emptyDir (0777).
+# Probado con la imagen real (mismo digest) antes de escribir esto:
+# `docker run --read-only --user 65534:65534 --cap-drop ALL
+# --security-opt no-new-privileges` con /app/data como tmpfs crea kuma.db,
+# aplica las migraciones y responde 302 -> /dashboard en /, y tambien en un
+# cluster kind local con exactamente este manifiesto renderizado. Unico
+# mensaje nuevo en el log: "Failed to start nscd" (cache de DNS opcional
+# que la app intenta levantar; sin el sigue resolviendo DNS normal) - y
+# no es nuevo: con la config anterior (root + CHOWN/SETUID/SETGID +
+# readOnlyRootFilesystem) tambien fallaba igual, confirmado corriendo
+# ambas versiones contra la misma imagen.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,12 +36,8 @@ metadata:
   labels:
     app: uptime-kuma
   annotations:
-    checkov.io/skip1: "CKV_K8S_43=imagen sin publicar digests estables en DockerHub para este tag - se deja el tag, mismo criterio que podinfo"
-    checkov.io/skip2: "CKV_K8S_21=namespace default a proposito, mismo criterio que podinfo - ver CLAUDE.md"
-    checkov.io/skip3: "CKV2_K8S_6=NetworkPolicy no verificado en Fargate/ACI, mismo motivo que podinfo"
-    checkov.io/skip4: "CKV_K8S_23=corre como root a proposito - el entrypoint de la imagen hace chown sobre /app/data al iniciar, probado a mano que falla con 'Operation not permitted' como no-root"
-    checkov.io/skip5: "CKV_K8S_40=mismo motivo que CKV_K8S_23 arriba - corre como root (UID 0), no un UID alto"
-    checkov.io/skip6: "CKV_K8S_25=capabilities agregadas a proposito (CHOWN, SETUID, SETGID) - el entrypoint necesita chown sobre /app/data y despues setpriv para bajar a un usuario sin privilegios antes de arrancar node, probado a mano contra el error real de cada una"
+    checkov.io/skip1: "CKV_K8S_21=namespace default a proposito, mismo criterio que podinfo - ver CLAUDE.md"
+    checkov.io/skip2: "CKV2_K8S_6=NetworkPolicy no verificado en Fargate/ACI, mismo motivo que podinfo"
 spec:
   replicas: 1
   strategy:
@@ -41,14 +52,34 @@ spec:
       annotations:
         checkov.io/skip1: "CKV2_K8S_6=NetworkPolicy no verificado en Fargate/ACI, mismo motivo que podinfo"
     spec:
+      # uptime-kuma no habla con la API de Kubernetes (monitorea por
+      # HTTP/TCP/DNS, no via kube-apiserver).
       automountServiceAccountToken: false
+      # Mismo criterio que podinfo: UID/GID alto no-root (CKV_K8S_40,
+      # 65534 = "nobody", ya existe en la imagen) y seccomp RuntimeDefault.
+      # Todo /app es root:root 0755/0644 en la imagen - legible por
+      # cualquier UID, verificado con ls -la contra la imagen.
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: uptime-kuma
-          image: louislam/uptime-kuma:1
+          # Tag + digest (CKV_K8S_43): "1" es un tag movil (hoy apunta a
+          # 1.23.17) - el digest fija exactamente esa build. Es el digest del
+          # indice multi-arch del tag, resuelto con
+          # `docker buildx imagetools inspect louislam/uptime-kuma:1`. Al
+          # actualizar, cambiar el digest (y el tag si se pasa a 2.x).
+          image: louislam/uptime-kuma:1@sha256:70233f4acb5163fd2a59a49909cf01e44415cecff13dba69e3a86647a2919f83
           imagePullPolicy: Always
+          # Saltea extra/entrypoint.sh (chown + setpriv, ver arriba) - mismo
+          # ENTRYPOINT (dumb-init como PID 1, para reenviar señales a node)
+          # y mismo CMD que la imagen, sin el paso intermedio que necesita
+          # root.
+          command: ["/usr/bin/dumb-init", "--"]
+          args: ["node", "server/server.js"]
           ports:
             - name: http
               containerPort: 3001
@@ -74,15 +105,11 @@ spec:
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
-            # El entrypoint arranca como root y usa setpriv para bajar a
-            # un usuario sin privilegios antes de arrancar node - eso
-            # necesita CAP_SETUID/CAP_SETGID (confirmado con el error
-            # real: "setpriv: setgroups failed: Operation not permitted"
-            # con drop: ["ALL"] puro), y el chown previo sobre /app/data
-            # necesita CAP_CHOWN (mismo patron que 2048/nginx).
+            runAsNonRoot: true
+            # Sin entrypoint (chown/setpriv) no hace falta ninguna
+            # capability - antes eran CHOWN, SETUID y SETGID.
             capabilities:
               drop: ["ALL"]
-              add: ["CHOWN", "SETUID", "SETGID"]
           volumeMounts:
             - name: data
               mountPath: /app/data

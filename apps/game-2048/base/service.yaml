@@ -9,5 +9,8 @@ spec:
     app: "game-2048"
   ports:
     - name: http
+      # El Service (y por lo tanto el Ingress) sigue en 80 - solo el
+      # container cambio a 8080 para no necesitar root (ver deployment.yaml).
+      # targetPort por nombre, asi que no hace falta repetir el 8080 acá.
       port: 80
       targetPort: http

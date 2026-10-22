@@ -6,6 +6,18 @@ resources:
   - service.yaml
   - scaledobject.yaml
 
+# nginx.conf para correr sin root - ver el propio archivo y deployment.yaml.
+# configMapGenerator (no un ConfigMap plano) a proposito: el sufijo hash en
+# el nombre hace que un cambio en nginx.conf genere un rollout del
+# Deployment solo, en vez de quedar pods viejos con el config anterior.
+configMapGenerator:
+  - name: game-2048-nginx
+    files:
+      - nginx.conf
+    options:
+      annotations:
+        checkov.io/skip1: "CKV_K8S_21=namespace default a proposito, mismo criterio que deployment.yaml - ver CLAUDE.md"
+
 commonLabels:
   app.kubernetes.io/name: "game-2048"
   app.kubernetes.io/part-of: k8s-apps
